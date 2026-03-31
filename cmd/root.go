@@ -19,6 +19,9 @@ var rootCmd = &cobra.Command{
 It knows your providers (OpenAI, Anthropic, HuggingFace, etc.), validates
 key formats, injects secrets into your scripts, and tracks which experiments
 used which key versions.`,
+	CompletionOptions: cobra.CompletionOptions{
+		DisableDefaultCmd: true,
+	},
 }
 
 func Execute() error {
