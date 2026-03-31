@@ -1,0 +1,6 @@
+bin/
+*.store
+*.enc
+.aikeys.store
+.env
+.aikeys.yml
