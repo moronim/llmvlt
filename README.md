@@ -2,7 +2,9 @@
 
 A CLI secret manager built for AI/ML engineers.
 
-`llmvlt` knows what `OPENAI_API_KEY` is. It knows what `ANTHROPIC_API_KEY` looks like. It warns you when a key format is wrong, tracks which keys were active during an experiment, and injects them safely into your scripts — without ever touching your shell history.
+An ML engineer today juggles 10-20 API keys across providers — OpenAI, Anthropic, Mistral, Replicate, Together, HuggingFace, Weights & Biases, LangSmith, and more. Keys rotate, get leaked in `.env` files committed to GitHub, end up hardcoded in notebooks, and there's no standard way to manage them across experiments. Generic secret managers don't understand what an `OPENAI_API_KEY` should look like or that your `WANDB_API_KEY` hasn't been rotated in six months.
+
+`llmvlt` is a single-binary, provider-aware secret manager that solves this. It encrypts your keys in a local vault, validates their format against known provider patterns, injects them into subprocesses without touching your shell history, and tracks which key versions were active during each experiment run.
 
 ```
 $ llmvlt init --preset openai-stack
@@ -20,9 +22,14 @@ $ llmvlt run -- python train.py
 
 ## Why not just use `.env` files?
 
-`.env` files get committed. API keys get leaked. It happens to everyone.
+`.env` files get committed. API keys get leaked. It happens to everyone — even to [experienced teams](https://blog.gitguardian.com/secrets-credentials-api-keys-leaked-in-public-repositories/).
 
-`llmvlt` keeps your secrets in an AES-256 encrypted vault on disk — never in plaintext, never in your shell history, never accidentally pushed to GitHub. And unlike generic secret managers, it understands the specific keys that AI/ML engineers use every day.
+`llmvlt` keeps your secrets in an AES-256 encrypted vault on disk — never in plaintext, never in your shell history, never accidentally pushed to GitHub. And unlike generic secret managers, it understands the specific keys that AI/ML engineers use every day:
+
+- **Validates formats** — catches a bad `OPENAI_API_KEY` before you burn GPU hours on a failed training run
+- **Injects safely** — secrets live only in the subprocess, never in your parent shell or `ps aux` output
+- **Tracks experiments** — tag runs and review which keys were active with `llmvlt history`
+- **Reminds you to rotate** — `llmvlt check` flags keys that are overdue for rotation
 
 ---
 
