@@ -2,138 +2,332 @@
 
 A CLI secret manager built for AI/ML engineers.
 
-<!-- TODO: Record and add animated GIF demo here -->
-<!-- ![aikeys demo](docs/demo.gif) -->
+`aikeys` knows what `OPENAI_API_KEY` is. It knows what `ANTHROPIC_API_KEY` looks like. It warns you when a key format is wrong, tracks which keys were active during an experiment, and injects them safely into your scripts — without ever touching your shell history.
 
-**aikeys** knows your providers — OpenAI, Anthropic, Hugging Face, Replicate, and more. It validates key formats, injects secrets into your scripts, and tracks which experiments used which key versions.
+```
+$ aikeys init --preset full-llm-stack
+✓ Vault initialized (.aikeys.store)
+✓ Preset: full-llm-stack — All major LLM provider credentials combined
 
-Stop leaking API keys in notebooks. Stop juggling `.env` files across projects.
+6 secrets to fill in:
 
-## Install
+  OPENAI_API_KEY                      (required) Your OpenAI API key
+  ANTHROPIC_API_KEY                   (required) Your Anthropic Claude API key
+  HF_TOKEN                            (required) Your Hugging Face access token
+  REPLICATE_API_TOKEN                 (required) Your Replicate API token
+  WANDB_API_KEY                       (required) Your W&B API key
+  LANGCHAIN_API_KEY                   (optional) Your LangSmith API key
 
-```bash
-# From source
-go install github.com/moronim/aikeys@latest
+$ aikeys set OPENAI_API_KEY sk-...
+✓ OPENAI_API_KEY set (version 1)
 
-# Or build locally
-git clone https://github.com/moronim/aikeys.git
-cd aikeys && make install
+$ aikeys run -- python train.py
 ```
 
-## Quick Start
+---
+
+## Why not just use `.env` files?
+
+`.env` files get committed. API keys get leaked. It happens to everyone.
+
+`aikeys` keeps your secrets in an AES-256 encrypted vault on disk — never in plaintext, never in your shell history, never accidentally pushed to GitHub. And unlike generic secret managers, it understands the specific keys that AI/ML engineers use every day.
+
+---
+
+## Installation
+
+### macOS
 
 ```bash
-# Initialize a vault with a preset
+brew install yourname/tap/aikeys
+```
+
+### Linux
+
+```bash
+curl -sSL https://get.aikeys.dev | sh
+```
+
+### Windows
+
+Download the latest `.exe` from the [releases page](https://github.com/yourname/aikeys/releases) and add it to your PATH.
+
+Or, if you have Go installed, build it yourself (see [Building from source](#building-from-source)).
+
+---
+
+## Getting Started
+
+**1. Initialize a vault in your project directory:**
+
+```bash
 aikeys init --preset openai-stack
-
-# Set your keys
-aikeys set OPENAI_API_KEY sk-proj-abc123...
-
-# Run a script with secrets injected (never touches your shell)
-aikeys run -- python train.py
-
-# Tag experiment runs for reproducibility
-aikeys run --tag "gpt4-baseline" -- python eval.py
 ```
 
-## Core Commands
+**2. Set your secrets:**
 
-| Command | Description |
-|---------|-------------|
-| `aikeys init [--preset NAME]` | Create a new vault, optionally with a provider preset |
-| `aikeys set KEY [VALUE]` | Store a secret (reads from stdin if no value given) |
-| `aikeys get KEY` | Retrieve a secret |
-| `aikeys list` | List all keys (values never shown) |
-| `aikeys run -- CMD` | Run a command with secrets injected |
-| `aikeys inject [--format FMT]` | Output secrets as shell exports, .env, or Jupyter cell |
-| `aikeys check` | Validate formats, check for empty keys, rotation reminders |
-| `aikeys use PROVIDER` | Switch active provider context for benchmarking |
-| `aikeys history` | View experiment run log |
-| `aikeys presets` | List all available provider presets |
+```bash
+aikeys set OPENAI_API_KEY sk-...
+aikeys set OPENAI_ORG_ID org-...
+```
 
-## Provider Presets
+**3. Run your script with secrets injected:**
 
-Presets scaffold the exact keys each provider needs, with format validation built in.
+```bash
+aikeys run -- python train.py
+```
 
-| Preset | Secrets |
-|--------|---------|
-| `openai-stack` | `OPENAI_API_KEY`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` |
-| `anthropic-stack` | `ANTHROPIC_API_KEY` |
-| `huggingface-stack` | `HF_TOKEN`, `HF_HOME` |
-| `replicate-stack` | `REPLICATE_API_TOKEN` |
-| `wandb-stack` | `WANDB_API_KEY`, `WANDB_PROJECT`, `WANDB_ENTITY` |
-| `langchain-stack` | `LANGCHAIN_API_KEY`, `LANGCHAIN_TRACING_V2`, `LANGCHAIN_ENDPOINT` |
-| `together-stack` | `TOGETHER_API_KEY` |
-| `mistral-stack` | `MISTRAL_API_KEY` |
-| `google-ai-stack` | `GOOGLE_API_KEY` |
-| `cohere-stack` | `COHERE_API_KEY` |
+Secrets are injected into the subprocess only — they never appear in your parent shell, in `ps aux` output, or in your shell history.
+
+---
+
+## Presets
+
+Presets are the core feature that makes `aikeys` different. Each preset knows which keys a provider uses, what they look like, and how often they should be rotated.
+
+| Preset | Description |
+|---|---|
+| `openai-stack` | OpenAI API credentials |
+| `anthropic-stack` | Anthropic Claude API credentials |
+| `huggingface-stack` | Hugging Face Hub credentials |
+| `wandb-stack` | Weights & Biases experiment tracking |
+| `replicate-stack` | Replicate API credentials |
+| `langchain-stack` | LangChain and LangSmith tracing |
 | `full-llm-stack` | All of the above combined |
-| `mlops-stack` | W&B + LangChain |
 
-## The `run` Command
-
-This is the hero feature. It injects secrets into a child process only — they never appear in your parent shell, shell history, or `ps` output.
+List all available presets:
 
 ```bash
-# Simple usage
-aikeys run -- python train.py
-
-# Tag for experiment tracking
-aikeys run --tag "claude-3.5-eval" -- python benchmark.py
-
-# View history
-aikeys history
-# 2026-03-15 14:30:00  python benchmark.py [claude-3.5-eval]
-#            ↳ ANTHROPIC_API_KEY
+aikeys preset list
 ```
 
-## Injection Formats
+You can also define your own presets in `~/.aikeys/presets/`:
+
+```yaml
+# ~/.aikeys/presets/my-company.yaml
+name: my-company-stack
+description: "Internal API credentials"
+secrets:
+  - key: MY_INTERNAL_API_KEY
+    description: "Internal service key"
+    required: true
+    validation:
+      pattern: "^int-[a-zA-Z0-9]{32}$"
+      hint: "Should start with 'int-'"
+```
+
+---
+
+## Commands
+
+### `aikeys init`
+
+Initialize a new vault in the current directory.
 
 ```bash
-# Shell (eval in bash/zsh)
+aikeys init                          # empty vault
+aikeys init --preset openai-stack    # with a preset
+```
+
+### `aikeys set`
+
+Store a secret. Validates the format against the active preset and warns if something looks wrong — but always stores the value regardless.
+
+```bash
+aikeys set OPENAI_API_KEY sk-...
+aikeys set HF_TOKEN hf_...
+```
+
+### `aikeys get`
+
+Retrieve a secret value.
+
+```bash
+aikeys get OPENAI_API_KEY
+```
+
+### `aikeys list`
+
+List all secret names stored in the vault. Never prints values.
+
+```bash
+aikeys list
+```
+
+### `aikeys run`
+
+Inject all secrets into a subprocess. The hero command.
+
+```bash
+aikeys run -- python train.py
+aikeys run -- jupyter notebook
+aikeys run -- pytest tests/
+```
+
+Secrets are available as environment variables inside the subprocess. They are never exposed to the parent shell.
+
+### `aikeys inject`
+
+Export secrets in different formats for use in other contexts.
+
+```bash
+# Inject into current shell session
 eval $(aikeys inject)
 
-# Dotenv file
-aikeys inject --format dotenv -o .env
-
-# Jupyter notebook cell
+# Generate a Jupyter cell to paste into a notebook
 aikeys inject --format jupyter
-# Output:
-# import os
-# os.environ['OPENAI_API_KEY'] = 'sk-...'
+
+# Write a .env file (use with caution)
+aikeys inject --format dotenv --out .env
 ```
 
-## Provider Switching
+### `aikeys check`
 
-Benchmarking the same script across providers:
+Check for keys that haven't been rotated recently.
 
 ```bash
-aikeys use anthropic
-aikeys run -- python eval.py   # Only Anthropic keys injected
+aikeys check
 
-aikeys use openai
-aikeys run -- python eval.py   # Only OpenAI keys injected
-
-aikeys use all                 # Re-enable everything
+# Example output:
+# ⚠  OPENAI_API_KEY — last rotated 94 days ago (recommended: 90 days)
+# ✓  ANTHROPIC_API_KEY — rotated 12 days ago
+# ✓  HF_TOKEN — rotated 45 days ago
 ```
 
-## Security
+### `aikeys use`
 
-- **AES-256-GCM** encryption at rest
-- **Argon2id** key derivation (resistant to GPU attacks)
-- Secrets injected into child process only via `run` — never in parent shell
-- Vault file permissions set to `0600` (owner read/write only)
-- Secrets never written to shell history
+Switch between providers when benchmarking the same script across multiple LLMs.
 
-## Why not just use...
+```bash
+aikeys use anthropic    # activates Anthropic keys
+aikeys use openai       # switches to OpenAI keys
+```
 
-| Tool | Why aikeys is different |
-|------|----------------------|
-| `.env` files | Unencrypted, no validation, no rotation tracking |
-| 1Password / Bitwarden | Password managers, not CLI tools. No `.env` injection or provider awareness |
-| HashiCorp Vault | Enterprise infrastructure. Overkill for a solo ML engineer |
-| Doppler / Infisical | Generic secret managers. No concept of AI providers or experiment tracking |
-| Python `keyring` | A library, not a workflow tool. No presets, no injection |
+### `aikeys history`
+
+Show which key versions were active during past runs (requires `--tag` on `run`).
+
+```bash
+aikeys run --tag "gpt4-baseline" -- python eval.py
+
+aikeys history
+# 2026-03-12 10:00  gpt4-baseline     OPENAI_API_KEY@v3
+# 2026-03-11 18:22  claude-comparison ANTHROPIC_API_KEY@v1
+```
+
+---
+
+## Building from Source
+
+You need [Go 1.22+](https://go.dev/dl/) installed.
+
+### macOS / Linux
+
+```bash
+git clone https://github.com/yourname/aikeys
+cd aikeys
+go build -o aikeys .
+```
+
+### Windows (PowerShell or Command Prompt)
+
+```powershell
+git clone https://github.com/yourname/aikeys
+cd aikeys
+go build -o aikeys.exe .
+.\aikeys.exe --help
+```
+
+If Go is not installed on Windows, download the `.msi` installer from [go.dev/dl](https://go.dev/dl). It adds Go to your PATH automatically — no manual setup needed.
+
+### Cross-compiling from any platform
+
+Go has built-in cross-compilation. No extra tools required.
+
+**From macOS or Linux:**
+
+```bash
+# Windows 64-bit
+GOOS=windows GOARCH=amd64 go build -o dist/aikeys-windows-amd64.exe .
+
+# Windows ARM (Surface, newer laptops)
+GOOS=windows GOARCH=arm64 go build -o dist/aikeys-windows-arm64.exe .
+
+# macOS Apple Silicon
+GOOS=darwin GOARCH=arm64 go build -o dist/aikeys-darwin-arm64 .
+
+# macOS Intel
+GOOS=darwin GOARCH=amd64 go build -o dist/aikeys-darwin-amd64 .
+
+# Linux 64-bit
+GOOS=linux GOARCH=amd64 go build -o dist/aikeys-linux-amd64 .
+```
+
+**From Windows (PowerShell):**
+
+```powershell
+# Linux 64-bit
+$env:GOOS="linux"; $env:GOARCH="amd64"; go build -o dist/aikeys-linux-amd64 .
+
+# macOS Apple Silicon
+$env:GOOS="darwin"; $env:GOARCH="arm64"; go build -o dist/aikeys-darwin-arm64 .
+```
+
+Note: on PowerShell, env vars use `$env:VAR="value"` syntax instead of the Unix `VAR=value` prefix.
+
+**Build all platforms at once:**
+
+```bash
+#!/bin/bash
+# build-all.sh
+VERSION=$(git describe --tags --always --dirty)
+
+platforms=(
+  "windows/amd64/.exe"
+  "windows/arm64/.exe"
+  "darwin/amd64/"
+  "darwin/arm64/"
+  "linux/amd64/"
+  "linux/arm64/"
+)
+
+for platform in "${platforms[@]}"; do
+  IFS='/' read -r os arch ext <<< "$platform"
+  output="dist/aikeys-${VERSION}-${os}-${arch}${ext}"
+  echo "Building $output..."
+  GOOS=$os GOARCH=$arch go build \
+    -ldflags="-s -w -X main.version=${VERSION}" \
+    -o "$output" .
+done
+
+echo "Done."
+```
+
+The `-ldflags="-s -w"` flag strips debug symbols and reduces binary size by ~30%.
+
+---
+
+## Security Model
+
+- Secrets are encrypted with **AES-256** using a key derived from your master password via **Argon2id**
+- The vault is a single encrypted file (`.aikeys.store`) — never plaintext
+- `aikeys run` forks a subprocess: secrets are injected into the child process only, never the parent shell
+- Secret values are never written to shell history
+- File permissions on the store are set to `0600` (owner read/write only)
+
+Built on top of [scrt](https://github.com/loderunner/scrt)'s proven encryption layer.
+
+---
+
+## Roadmap
+
+- [ ] Cloud sync across machines
+- [ ] Team vaults with access control
+- [ ] Key rotation automation
+- [ ] GitHub Actions integration
+- [ ] More presets (Cohere, Mistral, Together AI, Groq)
+
+---
 
 ## License
 
