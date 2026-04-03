@@ -5,20 +5,11 @@ A CLI secret manager built for AI/ML engineers.
 `llmvlt` knows what `OPENAI_API_KEY` is. It knows what `ANTHROPIC_API_KEY` looks like. It warns you when a key format is wrong, tracks which keys were active during an experiment, and injects them safely into your scripts — without ever touching your shell history.
 
 ```
-$ llmvlt init --preset full-llm-stack
+$ llmvlt init --preset openai-stack
 ✓ Vault initialized (.llmvlt.store)
-✓ Preset: full-llm-stack — All major LLM provider credentials combined
+  Preset: openai-stack — OpenAI API credentials
 
-6 secrets to fill in:
-
-  OPENAI_API_KEY                      (required) Your OpenAI API key
-  ANTHROPIC_API_KEY                   (required) Your Anthropic Claude API key
-  HF_TOKEN                            (required) Your Hugging Face access token
-  REPLICATE_API_TOKEN                 (required) Your Replicate API token
-  WANDB_API_KEY                       (required) Your W&B API key
-  LANGCHAIN_API_KEY                   (optional) Your LangSmith API key
-
-$ llmvlt set OPENAI_API_KEY sk-...
+$ llmvlt set OPENAI_API_KEY sk-proj-abc123...
 ✓ OPENAI_API_KEY format looks valid
 ✓ Secret OPENAI_API_KEY saved
 
@@ -37,23 +28,15 @@ $ llmvlt run -- python train.py
 
 ## Installation
 
-### macOS
+### From source (requires Go 1.25+)
 
 ```bash
-brew install yourname/tap/llmvlt
+go install github.com/moronim/llmvlt@latest
 ```
 
-### Linux
+### From GitHub releases
 
-```bash
-curl -sSL https://get.llmvlt.dev | sh
-```
-
-### Windows
-
-Download the latest `.exe` from the [releases page](https://github.com/yourname/llmvlt/releases) and add it to your PATH.
-
-Or, if you have Go installed, build it yourself (see [Building from source](#building-from-source)).
+Download the latest binary for your platform from the [releases page](https://github.com/moronim/llmvlt/releases) and add it to your PATH.
 
 ---
 
@@ -89,32 +72,22 @@ Presets are the core feature that makes `llmvlt` different. Each preset knows wh
 | Preset | Description |
 |---|---|
 | `openai-stack` | OpenAI API credentials |
-| `anthropic-stack` | Anthropic Claude API credentials |
-| `huggingface-stack` | Hugging Face Hub credentials |
-| `wandb-stack` | Weights & Biases experiment tracking |
+| `anthropic-stack` | Anthropic (Claude) API credentials |
+| `huggingface-stack` | Hugging Face credentials |
 | `replicate-stack` | Replicate API credentials |
-| `langchain-stack` | LangChain and LangSmith tracing |
-| `full-llm-stack` | All of the above combined |
+| `wandb-stack` | Weights & Biases credentials |
+| `langchain-stack` | LangChain / LangSmith credentials |
+| `together-stack` | Together AI credentials |
+| `mistral-stack` | Mistral AI credentials |
+| `google-ai-stack` | Google AI (Gemini) credentials |
+| `cohere-stack` | Cohere API credentials |
+| `full-llm-stack` | All LLM provider credentials combined |
+| `mlops-stack` | ML experiment tracking & ops (W&B + LangSmith) |
 
 List all available presets:
 
 ```bash
-llmvlt preset list
-```
-
-You can also define your own presets in `~/.llmvlt/presets/`:
-
-```yaml
-# ~/.llmvlt/presets/my-company.yaml
-name: my-company-stack
-description: "Internal API credentials"
-secrets:
-  - key: MY_INTERNAL_API_KEY
-    description: "Internal service key"
-    required: true
-    validation:
-      pattern: "^int-[a-zA-Z0-9]{32}$"
-      hint: "Should start with 'int-'"
+llmvlt presets
 ```
 
 ---
@@ -214,105 +187,52 @@ llmvlt use openai       # switches to OpenAI keys
 
 ### `llmvlt history`
 
-Show which key versions were active during past runs (requires `--tag` on `run`).
+Show a log of commands executed via `llmvlt run`, including which secrets were active and any experiment tags.
 
 ```bash
 llmvlt run --tag "gpt4-baseline" -- python eval.py
+llmvlt run --tag "claude-comparison" -- python eval.py
 
 llmvlt history
-# 2026-03-12 10:00  gpt4-baseline     OPENAI_API_KEY@v3
-# 2026-03-11 18:22  claude-comparison ANTHROPIC_API_KEY@v1
+# 2026-03-12 10:00:00  python eval.py [claude-comparison]
+#            ↳ ANTHROPIC_API_KEY
+# 2026-03-11 18:22:00  python eval.py [gpt4-baseline]
+#            ↳ OPENAI_API_KEY
+
+llmvlt history --last 5    # show only last 5 entries
 ```
 
 ---
 
 ## Building from Source
 
-You need [Go 1.22+](https://go.dev/dl/) installed.
-
-### macOS / Linux
+You need [Go 1.25+](https://go.dev/dl/) installed.
 
 ```bash
-git clone https://github.com/yourname/llmvlt
+git clone https://github.com/moronim/llmvlt
 cd llmvlt
-go build -o llmvlt .
+make build
 ```
 
-### Windows (PowerShell or Command Prompt)
+### Release binaries
 
-```powershell
-git clone https://github.com/yourname/llmvlt
-cd llmvlt
-go build -o llmvlt.exe .
-.\llmvlt.exe --help
-```
-
-If Go is not installed on Windows, download the `.msi` installer from [go.dev/dl](https://go.dev/dl). It adds Go to your PATH automatically — no manual setup needed.
-
-### Cross-compiling from any platform
-
-Go has built-in cross-compilation. No extra tools required.
-
-**From macOS or Linux:**
+The Makefile includes a `release` target that cross-compiles for all supported platforms:
 
 ```bash
-# Windows 64-bit
-GOOS=windows GOARCH=amd64 go build -o dist/llmvlt-windows-amd64.exe .
-
-# Windows ARM (Surface, newer laptops)
-GOOS=windows GOARCH=arm64 go build -o dist/llmvlt-windows-arm64.exe .
-
-# macOS Apple Silicon
-GOOS=darwin GOARCH=arm64 go build -o dist/llmvlt-darwin-arm64 .
-
-# macOS Intel
-GOOS=darwin GOARCH=amd64 go build -o dist/llmvlt-darwin-amd64 .
-
-# Linux 64-bit
-GOOS=linux GOARCH=amd64 go build -o dist/llmvlt-linux-amd64 .
+make release
 ```
 
-**From Windows (PowerShell):**
+This produces:
+- `bin/llmvlt-linux-amd64`
+- `bin/llmvlt-linux-arm64`
+- `bin/llmvlt-macos-arm64`
+- `bin/llmvlt-windows-amd64.exe`
 
-```powershell
-# Linux 64-bit
-$env:GOOS="linux"; $env:GOARCH="amd64"; go build -o dist/llmvlt-linux-amd64 .
-
-# macOS Apple Silicon
-$env:GOOS="darwin"; $env:GOARCH="arm64"; go build -o dist/llmvlt-darwin-arm64 .
-```
-
-Note: on PowerShell, env vars use `$env:VAR="value"` syntax instead of the Unix `VAR=value` prefix.
-
-**Build all platforms at once:**
+To publish a GitHub release:
 
 ```bash
-#!/bin/bash
-# build-all.sh
-VERSION=$(git describe --tags --always --dirty)
-
-platforms=(
-  "windows/amd64/.exe"
-  "windows/arm64/.exe"
-  "darwin/amd64/"
-  "darwin/arm64/"
-  "linux/amd64/"
-  "linux/arm64/"
-)
-
-for platform in "${platforms[@]}"; do
-  IFS='/' read -r os arch ext <<< "$platform"
-  output="dist/llmvlt-${VERSION}-${os}-${arch}${ext}"
-  echo "Building $output..."
-  GOOS=$os GOARCH=$arch go build \
-    -ldflags="-s -w -X main.version=${VERSION}" \
-    -o "$output" .
-done
-
-echo "Done."
+./release.sh v0.1.0
 ```
-
-The `-ldflags="-s -w"` flag strips debug symbols and reduces binary size by ~30%.
 
 ---
 
@@ -324,7 +244,7 @@ The `-ldflags="-s -w"` flag strips debug symbols and reduces binary size by ~30%
 - Secret values are never written to shell history
 - File permissions on the store are set to `0600` (owner read/write only)
 
-Built on top of [scrt](https://github.com/loderunner/scrt)'s proven encryption layer.
+Inspired by [scrt](https://github.com/loderunner/scrt).
 
 ---
 
@@ -334,7 +254,7 @@ Built on top of [scrt](https://github.com/loderunner/scrt)'s proven encryption l
 - [ ] Team vaults with access control
 - [ ] Key rotation automation
 - [ ] GitHub Actions integration
-- [ ] More presets (Cohere, Mistral, Together AI, Groq)
+- [ ] More presets (Groq, DeepSeek, etc.)
 
 ---
 
