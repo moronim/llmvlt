@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>llmvlt - Secret manager for AI/ML engineers</title>
+  <meta name="description" content="Encrypted vault with provider-aware presets, format validation, and safe secret injection into subprocesses.">
+  <meta property="og:title" content="llmvlt - Secret manager for AI/ML engineers">
+  <meta property="og:description" content="Stop leaking API keys. llmvlt encrypts, validates, and injects your AI provider secrets.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://llmvlt.dev">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+  <style>
+    :root {
+      --bg: #0F172A;
+      --bg-surface: #162036;
+      --bg-code: #0c1322;
+      --text: #F4F4F4;
+      --text-dim: #94a3b8;
+      --text-muted: #64748B;
+      --neon: #22D3EE;
+      --neon-dim: #19b0c7;
+      --neon-glow: rgba(34, 211, 238, 0.12);
+      --neon-glow-strong: rgba(34, 211, 238, 0.25);
+      --accent2: #a78bfa;
+      --accent3: #67e8f9;
+      --border: #1e293b;
+      --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-code: #f1f5f9;
+      --text: #0f172a;
+      --text-dim: #64748b;
+      --text-muted: #94a3b8;
+      --neon: #0891b2;
+      --neon-dim: #0e7490;
+      --neon-glow: rgba(8, 145, 178, 0.1);
+      --neon-glow-strong: rgba(8, 145, 178, 0.2);
+      --accent2: #7c3aed;
+      --accent3: #0284c7;
+      --border: #e2e8f0;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+    }
+
+    body {
+      font-family: var(--mono);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    /* Grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 60px 60px;
+      opacity: 0.3;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Layout */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Nav */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 10, 15, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.3s;
+    }
+
+    [data-theme="light"] nav {
+      background: rgba(245, 245, 240, 0.85);
+    }
+
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+    }
+
+    .nav-logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--neon);
+      text-decoration: none;
+      letter-spacing: -0.5px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .nav-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.8rem;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--neon); }
+
+    .theme-toggle {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+
+    .theme-toggle:hover {
+      border-color: var(--neon);
+      color: var(--neon);
+    }
+
+    /* Hero */
+    .hero {
+      padding: 140px 0 80px;
+      text-align: center;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      color: var(--neon);
+      border: 1px solid var(--neon);
+      border-radius: 20px;
+      padding: 4px 14px;
+      margin-bottom: 24px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      background: var(--neon-glow);
+    }
+
+    h1 {
+      font-family: var(--mono);
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 800;
+      letter-spacing: -2px;
+      line-height: 1.1;
+      margin-bottom: 20px;
+    }
+
+    h1 .accent { color: var(--neon); }
+
+    .hero-sub {
+      font-family: var(--sans);
+      font-size: 1.15rem;
+      color: var(--text-dim);
+      max-width: 560px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+
+    /* Install box */
+    .install-box {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0;
+      max-width: 600px;
+      margin: 0 auto 20px;
+      overflow: hidden;
+    }
+
+    .install-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .install-tab {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-bottom: 2px solid transparent;
+    }
+
+    .install-tab.active {
+      color: var(--neon);
+      border-bottom-color: var(--neon);
+      background: var(--neon-glow);
+    }
+
+    .install-tab:hover:not(.active) {
+      color: var(--text);
+    }
+
+    .install-content {
+      padding: 20px 24px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .install-content.active { display: flex; }
+
+    .install-content code {
+      flex: 1;
+      font-size: 0.85rem;
+      color: var(--neon);
+      white-space: nowrap;
+      overflow-x: auto;
+    }
+
+    .install-content .prompt {
+      color: var(--text-muted);
+      user-select: none;
+    }
+
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-family: var(--mono);
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--neon);
+      color: var(--neon);
+    }
+
+    .copy-btn.copied {
+      border-color: var(--neon);
+      color: var(--neon);
+    }
+
+    .hero-links {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 16px;
+      font-size: 0.8rem;
+    }
+
+    .hero-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .hero-links a:hover { color: var(--neon); }
+
+    /* Terminal demo */
+    .terminal {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 60px auto;
+      max-width: 700px;
+      box-shadow: 0 0 60px var(--neon-glow);
+    }
+
+    .terminal-header {
+      background: var(--bg-surface);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .terminal-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .terminal-dot:nth-child(1) { background: #ff5f57; }
+    .terminal-dot:nth-child(2) { background: #febc2e; }
+    .terminal-dot:nth-child(3) { background: #28c840; }
+
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .terminal-body {
+      padding: 20px 24px;
+      font-size: 0.82rem;
+      line-height: 1.8;
+      min-height: 280px;
+    }
+
+    .terminal-body .line {
+      opacity: 0;
+      transform: translateY(4px);
+      animation: lineIn 0.3s forwards;
+    }
+
+    .terminal-body .prompt-char { color: var(--neon); user-select: none; }
+    .terminal-body .cmd { color: var(--text); }
+    .terminal-body .flag { color: var(--accent2); }
+    .terminal-body .string { color: var(--accent3); }
+    .terminal-body .output { color: var(--text-dim); }
+    .terminal-body .success { color: var(--neon); }
+    .terminal-body .dim { color: var(--text-muted); }
+    .terminal-body .blank { height: 8px; }
+
+    @keyframes lineIn {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Features */
+    .features {
+      padding: 60px 0;
+    }
+
+    .features h2 {
+      font-size: 1.6rem;
+      margin-bottom: 48px;
+      letter-spacing: -1px;
+    }
+
+    .features h2 .accent { color: var(--neon); }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+
+    .feature-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 28px 24px;
+      transition: all 0.3s;
+    }
+
+    .feature-card:hover {
+      border-color: var(--neon);
+      box-shadow: 0 0 30px var(--neon-glow);
+    }
+
+    .feature-icon {
+      font-size: 1.5rem;
+      margin-bottom: 12px;
+    }
+
+    .feature-card h3 {
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+      letter-spacing: -0.3px;
+    }
+
+    .feature-card p {
+      font-family: var(--sans);
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    /* Presets */
+    .presets {
+      padding: 60px 0;
+    }
+
+    .presets h2 {
+      font-size: 1.6rem;
+      margin-bottom: 16px;
+      letter-spacing: -1px;
+    }
+
+    .presets h2 .accent { color: var(--neon); }
+
+    .presets-sub {
+      color: var(--text-dim);
+      font-family: var(--sans);
+      font-size: 0.9rem;
+      margin-bottom: 32px;
+    }
+
+    .preset-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .preset-item {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      transition: all 0.2s;
+    }
+
+    .preset-item:hover {
+      border-color: var(--neon);
+    }
+
+    .preset-name {
+      font-size: 0.82rem;
+      color: var(--neon);
+      margin-bottom: 4px;
+    }
+
+    .preset-desc {
+      font-family: var(--sans);
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+
+    /* Code examples */
+    .examples {
+      padding: 60px 0;
+    }
+
+    .examples h2 {
+      font-size: 1.6rem;
+      margin-bottom: 32px;
+      letter-spacing: -1px;
+    }
+
+    .examples h2 .accent { color: var(--neon); }
+
+    .example-block {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+
+    .example-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .example-code {
+      padding: 16px 20px;
+      font-size: 0.82rem;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    .example-code .prompt-char { color: var(--neon); user-select: none; }
+    .example-code .cmd { color: var(--text); }
+    .example-code .flag { color: var(--accent2); }
+    .example-code .string { color: var(--accent3); }
+    .example-code .comment { color: var(--text-muted); }
+    .example-code .output { color: var(--text-dim); }
+    .example-code .success { color: var(--neon); }
+
+    /* CTA */
+    .cta {
+      padding: 80px 0;
+      text-align: center;
+    }
+
+    .cta h2 {
+      font-size: 1.8rem;
+      margin-bottom: 12px;
+      letter-spacing: -1px;
+    }
+
+    .cta p {
+      font-family: var(--sans);
+      color: var(--text-dim);
+      margin-bottom: 32px;
+      font-size: 0.95rem;
+    }
+
+    .cta-btn {
+      display: inline-block;
+      background: var(--neon);
+      color: var(--bg);
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 12px 32px;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: all 0.2s;
+      letter-spacing: -0.3px;
+    }
+
+    .cta-btn:hover {
+      box-shadow: 0 0 30px var(--neon-glow-strong);
+      transform: translateY(-1px);
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    footer a {
+      color: var(--text-dim);
+      text-decoration: none;
+    }
+
+    footer a:hover { color: var(--neon); }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .hero { padding: 120px 0 60px; }
+      .terminal-body { font-size: 0.72rem; padding: 16px; }
+      .nav-links a.hide-mobile { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a href="#" class="nav-logo">llmvlt</a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#presets">Presets</a>
+      <a href="#examples" class="hide-mobile">Examples</a>
+      <a href="https://github.com/moronim/llmvlt">GitHub</a>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+        <span class="theme-icon">&#9790;</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge">Open Source</div>
+    <h1>Your AI keys.<br><span class="accent">Encrypted.</span></h1>
+    <p class="hero-sub">
+      ML engineers juggle 10&ndash;20 API keys across OpenAI, Anthropic, Mistral, HuggingFace, W&amp;B, and more.
+      Keys rotate, leak in committed <code>.env</code> files, and there's no standard way to manage them across experiments.
+      <code>llmvlt</code> fixes that &mdash; one encrypted vault, provider-aware validation, safe subprocess injection.
+    </p>
+
+    <div class="install-box">
+      <div class="install-tabs">
+        <button class="install-tab active" onclick="showTab('macos')">macOS / Linux</button>
+        <button class="install-tab" onclick="showTab('windows')">Windows</button>
+        <button class="install-tab" onclick="showTab('go')">Go</button>
+      </div>
+      <div class="install-content active" id="tab-macos">
+        <code><span class="prompt">$</span> curl -sSL https://llmvlt.dev/install.sh | sh</code>
+        <button class="copy-btn" onclick="copyInstall(this, 'curl -sSL https://llmvlt.dev/install.sh | sh')">copy</button>
+      </div>
+      <div class="install-content" id="tab-windows">
+        <code><span class="prompt">&gt;</span> irm https://llmvlt.dev/install.ps1 | iex</code>
+        <button class="copy-btn" onclick="copyInstall(this, 'irm https://llmvlt.dev/install.ps1 | iex')">copy</button>
+      </div>
+      <div class="install-content" id="tab-go">
+        <code><span class="prompt">$</span> go install github.com/moronim/llmvlt@latest</code>
+        <button class="copy-btn" onclick="copyInstall(this, 'go install github.com/moronim/llmvlt@latest')">copy</button>
+      </div>
+    </div>
+
+    <div class="hero-links">
+      <a href="https://github.com/moronim/llmvlt/releases">Releases</a>
+      <span style="color: var(--text-muted)">|</span>
+      <a href="https://github.com/moronim/llmvlt">Source</a>
+      <span style="color: var(--text-muted)">|</span>
+      <a href="https://github.com/moronim/llmvlt#readme">Docs</a>
+    </div>
+  </div>
+</section>
+
+<!-- Terminal Demo -->
+<div class="container">
+  <div class="terminal">
+    <div class="terminal-header">
+      <div class="terminal-dot"></div>
+      <div class="terminal-dot"></div>
+      <div class="terminal-dot"></div>
+      <span class="terminal-title">llmvlt &mdash; terminal</span>
+    </div>
+    <div class="terminal-body" id="terminal-demo">
+    </div>
+  </div>
+</div>
+
+<!-- Features -->
+<section class="features" id="features">
+  <div class="container">
+    <h2>Why <span class="accent">llmvlt</span></h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f512;</div>
+        <h3>AES-256 + Argon2id</h3>
+        <p>Secrets encrypted at rest with a master password. Single file vault, 0600 permissions. No plaintext ever.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x2714;</div>
+        <h3>Format validation</h3>
+        <p>Knows that OpenAI keys start with <code>sk-</code>, HF tokens with <code>hf_</code>. Blocks bad formats before they waste your GPU hours.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f680;</div>
+        <h3>Subprocess injection</h3>
+        <p><code>llmvlt run -- python train.py</code> injects secrets into the child process only. Never touches your shell or history.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f4cb;</div>
+        <h3>Provider presets</h3>
+        <p>12 built-in presets for OpenAI, Anthropic, HuggingFace, Cohere, Mistral, W&B, and more. One command to scaffold.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f4c8;</div>
+        <h3>Experiment tracking</h3>
+        <p>Tag runs, review which keys were active. <code>llmvlt history</code> shows your experiment audit trail.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f4e4;</div>
+        <h3>Multi-format export</h3>
+        <p>Inject as shell exports, .env files, or Jupyter <code>os.environ</code> cells. Pipe-friendly output.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Presets -->
+<section class="presets" id="presets">
+  <div class="container">
+    <h2>Built-in <span class="accent">presets</span></h2>
+    <p class="presets-sub">Provider-aware scaffolding. Each preset knows the keys, formats, and rotation policies.</p>
+    <div class="preset-list">
+      <div class="preset-item">
+        <div class="preset-name">openai-stack</div>
+        <div class="preset-desc">OpenAI API credentials</div>
+      </div>
+      <div class="preset-item">
+        <div class="preset-name">anthropic-stack</div>
+        <div class="preset-desc">Anthropic (Claude) API</div>
+      </div>
+      <div class="preset-item">
+        <div class="preset-name">huggingface-stack</div>
+        <div class="preset-desc">Hugging Face credentials</div>
+      </div>
+      <div class="preset-item">
+        <div class="preset-name">replicate-stack</div>
+        <div class="preset-desc">Replicate API</div>
+      </div>
+      <div class="preset-item">
+        <div class="preset-name">wandb-stack</div>
+        <div class="preset-desc">Weights & Biases</div>
+      </div>
+      <div class="preset-item">
+        <div class="preset-name">langchain-stack</div>
+        <div class="preset-desc">LangChain / LangSmith</div>
+      </div>
+      <div class="preset-item">
+        <div class="preset-name">together-stack</div>
+        <div class="preset-desc">Together AI</div>
+      </div>
+      <div class="preset-item">
+        <div class="preset-name">mistral-stack</div>
+        <div class="preset-desc">Mistral AI</div>
+      </div>
+      <div class="preset-item">
+        <div class="preset-name">google-ai-stack</div>
+        <div class="preset-desc">Google AI (Gemini)</div>
+      </div>
+      <div class="preset-item">
+        <div class="preset-name">cohere-stack</div>
+        <div class="preset-desc">Cohere API</div>
+      </div>
+      <div class="preset-item">
+        <div class="preset-name">full-llm-stack</div>
+        <div class="preset-desc">All providers combined</div>
+      </div>
+      <div class="preset-item">
+        <div class="preset-name">mlops-stack</div>
+        <div class="preset-desc">W&B + LangSmith</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Examples -->
+<section class="examples" id="examples">
+  <div class="container">
+    <h2>How it <span class="accent">works</span></h2>
+
+    <div class="example-block">
+      <div class="example-label">Initialize a vault with a preset</div>
+      <div class="example-code">
+<span class="prompt-char">$</span> <span class="cmd">llmvlt init</span> <span class="flag">--preset</span> <span class="string">openai-stack</span>
+<br>
+<span class="output">&#x2713; Vault initialized (.llmvlt.store)</span>
+<span class="output">  Preset: openai-stack &mdash; OpenAI API credentials</span>
+      </div>
+    </div>
+
+    <div class="example-block">
+      <div class="example-label">Set secrets with format validation</div>
+      <div class="example-code">
+<span class="prompt-char">$</span> <span class="cmd">llmvlt set</span> <span class="string">OPENAI_API_KEY</span> <span class="string">sk-proj-abc123...</span>
+<br>
+<span class="success">&#x2713; OPENAI_API_KEY format looks valid</span>
+<br>
+<span class="success">&#x2713; Secret OPENAI_API_KEY saved</span>
+<br>
+<span class="prompt-char">$</span> <span class="cmd">llmvlt set</span> <span class="string">OPENAI_API_KEY</span> <span class="string">wrong-value</span>
+<br>
+<span class="output" style="color:#f87171;">&#x2717; Invalid format. OPENAI_API_KEY: Should start with 'sk-' or 'sk-proj-'</span>
+<br>
+<span class="comment"># use --force to override</span>
+      </div>
+    </div>
+
+    <div class="example-block">
+      <div class="example-label">Run experiments with secrets injected</div>
+      <div class="example-code">
+<span class="prompt-char">$</span> <span class="cmd">llmvlt run</span> <span class="flag">--tag</span> <span class="string">"gpt4-baseline"</span> <span class="flag">--</span> <span class="cmd">python train.py</span>
+<br>
+<span class="comment"># secrets injected into subprocess only</span>
+<br>
+<span class="comment"># parent shell stays clean</span>
+<br>
+<span class="prompt-char">$</span> <span class="cmd">llmvlt history</span>
+<br>
+<span class="output">  2026-04-03 14:30:00  python train.py [gpt4-baseline]</span>
+<br>
+<span class="output">             &#x21b3; OPENAI_API_KEY</span>
+      </div>
+    </div>
+
+    <div class="example-block">
+      <div class="example-label">Export in multiple formats</div>
+      <div class="example-code">
+<span class="prompt-char">$</span> <span class="cmd">llmvlt inject</span> <span class="flag">--format</span> <span class="string">dotenv</span>      
+<br> 
+<span class="comment"># .env format</span>
+<span class="prompt-char">$</span> 
+<br>
+<span class="cmd">llmvlt inject</span> <span class="flag">--format</span> <span class="string">shell</span>        
+<br>
+<span class="comment"># export statements</span>
+<br>
+<span class="prompt-char">$</span> <span class="cmd">llmvlt inject</span> <span class="flag">--format</span> <span class="string">jupyter</span>     
+<br>
+<span class="comment"># os.environ cells</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta">
+  <div class="container">
+    <h2>Stop leaking API keys.</h2>
+    <p>One binary. Zero dependencies. Works everywhere Go compiles.</p>
+    <a href="https://github.com/moronim/llmvlt" class="cta-btn">View on GitHub</a>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <a href="https://github.com/moronim/llmvlt">llmvlt</a> &middot; Apache 2.0 &middot; Built by <a href="https://github.com/moronim">moronim</a>
+  </div>
+</footer>
+
+<script>
+  // Theme toggle
+  function toggleTheme() {
+    const html = document.documentElement;
+    const current = html.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('llmvlt-theme', next);
+    document.querySelector('.theme-icon').innerHTML = next === 'dark' ? '\u263E' : '\u2600';
+  }
+
+  // Restore saved theme
+  const saved = localStorage.getItem('llmvlt-theme');
+  if (saved) {
+    document.documentElement.setAttribute('data-theme', saved);
+    document.querySelector('.theme-icon').innerHTML = saved === 'dark' ? '\u263E' : '\u2600';
+  }
+
+  // Install tabs
+  function showTab(name) {
+    document.querySelectorAll('.install-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.install-content').forEach(c => c.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+  }
+
+  // Copy button
+  function copyInstall(btn, text) {
+    navigator.clipboard.writeText(text);
+    btn.textContent = 'copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 2000);
+  }
+
+  // Terminal animation
+  const lines = [
+    { type: 'cmd', text: '$ llmvlt init --preset openai-stack' },
+    { type: 'success', text: '\u2713 Vault initialized (.llmvlt.store)' },
+    { type: 'output', text: '  Preset: openai-stack \u2014 OpenAI API credentials' },
+    { type: 'blank' },
+    { type: 'cmd', text: '$ llmvlt set OPENAI_API_KEY sk-proj-abc123...' },
+    { type: 'success', text: '\u2713 OPENAI_API_KEY format looks valid' },
+    { type: 'success', text: '\u2713 Secret OPENAI_API_KEY saved' },
+    { type: 'blank' },
+    { type: 'cmd', text: '$ llmvlt run --tag "gpt4-baseline" -- python train.py' },
+    { type: 'dim', text: '  # secrets injected into subprocess' },
+    { type: 'output', text: '  Training started... epoch 1/10' },
+    { type: 'blank' },
+    { type: 'cmd', text: '$ llmvlt check' },
+    { type: 'success', text: '\u2713  OPENAI_API_KEY \u2014 rotated 3 days ago' },
+    { type: 'success', text: '\u2713  OPENAI_ORG_ID \u2014 set' },
+  ];
+
+  function runTerminal() {
+    const container = document.getElementById('terminal-demo');
+    container.innerHTML = '';
+    let delay = 0;
+
+    lines.forEach((line, i) => {
+      const div = document.createElement('div');
+
+      if (line.type === 'blank') {
+        div.className = 'blank';
+        div.style.animationDelay = delay + 'ms';
+        div.style.opacity = '1';
+        container.appendChild(div);
+        delay += 100;
+        return;
+      }
+
+      div.className = 'line ' + line.type;
+      div.style.animationDelay = delay + 'ms';
+      div.textContent = line.text;
+      container.appendChild(div);
+      delay += line.type === 'cmd' ? 600 : 200;
+    });
+
+    // Loop after completion
+    setTimeout(runTerminal, delay + 4000);
+  }
+
+  // Start animation when terminal is visible
+  const observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) {
+      runTerminal();
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.getElementById('terminal-demo'));
+</script>
+
+</body>
+</html>
